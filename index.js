@@ -114,7 +114,17 @@ async function run() {
       res.send(result);
     });
     app.get("/meals", async (req, res) => {
-      const result = await mealCollection.find().toArray();
+      const filter = req.query;
+    //   console.log(filter);
+      const query = {
+        mealName: { $regex: filter.search, $options: "i" },
+      };
+      const options = {
+        sort: {
+          price: filter.sort === "asc" ? 1 : -1,
+        },
+      };
+      const result = await mealCollection.find(query, options).toArray();
       res.send(result);
     });
     app.get("/meals/:id", async (req, res) => {
@@ -145,7 +155,7 @@ async function run() {
       const result = await mealCollection.updateOne(filter, updatedDoc);
       res.send(result);
     });
-    app.delete("/meals/:id",  async (req, res) => {
+    app.delete("/meals/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await mealCollection.deleteOne(query);
