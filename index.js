@@ -29,6 +29,9 @@ async function run() {
   try {
     const mealCollection = client.db("mealManagement").collection("meals");
     const usersCollection = client.db("mealManagement").collection("users");
+    const requestCollection = client.db("mealManagement").collection("request");
+    const LikeCollection = client.db("mealManagement").collection("like");
+    const reviewsCollection = client.db("mealManagement").collection("reviews");
     // jwt route
     app.post("/jwt", (req, res) => {
       const user = req.body;
@@ -80,12 +83,16 @@ async function run() {
 
     app.get("/users", async (req, res) => {
       const filter = req.query;
-      console.log(filter.search);
+      // console.log(filter.search);
       const query = {
         name: { $regex: filter.search, $options: "i" },
         // email: { $regex: filter.search, $options: "i" },
       };
       const result = await usersCollection.find(query).toArray();
+      res.send(result);
+    });
+    app.get("/users", async (req, res) => {
+      const result = await usersCollection.find().toArray();
       res.send(result);
     });
 
@@ -115,9 +122,13 @@ async function run() {
     });
     app.get("/meals", async (req, res) => {
       const filter = req.query;
-    //   console.log(filter);
+      console.log(filter);
       const query = {
-        mealName: { $regex: filter.search, $options: "i" },
+        $or: [
+          {
+            mealName: { $regex: filter.search, $options: "i" },
+          },
+        ],
       };
       const options = {
         sort: {
@@ -127,6 +138,7 @@ async function run() {
       const result = await mealCollection.find(query, options).toArray();
       res.send(result);
     });
+
     app.get("/meals/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
@@ -161,6 +173,52 @@ async function run() {
       const result = await mealCollection.deleteOne(query);
       res.send(result);
     });
+
+    //  like
+    app.post("/likeCount", async (req, res) => {
+      const requestLike = req.body;
+      const result = await LikeCollection.insertOne(requestLike);
+      res.send(result);
+    });
+    app.get("/likeCount/:mealName", async (req, res) => {
+      const mealName = req.params.mealName;
+      const query = {
+        mealName: mealName,
+      };
+      const result = await LikeCollection.find(query).toArray();
+      res.send(result);
+    });
+    // reviews related api
+    app.post("/reviews", async (req, res) => {
+      const reviews = req.body;
+      const result = await reviewsCollection.insertOne(reviews);
+      res.send(result);
+    });
+    app.get("/reviews", async (req, res) => {
+      const result = await reviewsCollection.find().toArray();
+      res.send(result);
+    });
+
+    app.post("/request", async (req, res) => {
+      const query = req.body;
+      const result = await requestCollection.insertOne(query);
+      res.send(result);
+    });
+    app.get("/request/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = {
+        email: email,
+      };
+      const result = await requestCollection.find(query).toArray();
+      res.send(result);
+    });
+    app.delete("/request/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await requestCollection.deleteOne(query);
+      res.send(result);
+    });
+
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
