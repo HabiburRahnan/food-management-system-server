@@ -10,8 +10,8 @@ const port = process.env.PORT || 5000;
 
 const corsOptions = {
   origin: ["http://localhost:5173", "http://localhost:5174"],
-  //   credentials: true,
-  //   optionSuccessStatus: 200,
+  credentials: true,
+  optionSuccessStatus: 200,
 };
 app.use(cors(corsOptions));
 app.use(express.json());
@@ -33,7 +33,7 @@ async function run() {
     const LikeCollection = client.db("mealManagement").collection("like");
     const reviewsCollection = client.db("mealManagement").collection("reviews");
     // jwt route
-    app.post("/jwt", (req, res) => {
+    app.post("/jwt", async (req, res) => {
       const user = req.body;
       const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
         expiresIn: "24h",
@@ -81,33 +81,52 @@ async function run() {
       }
     });
 
-    app.get("/users", async (req, res) => {
+    app.get("/users", verifyToken, verifyAdmin, async (req, res) => {
       const filter = req.query;
       // console.log(filter.search);
-      const query = {
-        name: { $regex: filter.search, $options: "i" },
-        // email: { $regex: filter.search, $options: "i" },
-      };
-      const result = await usersCollection.find(query).toArray();
-      res.send(result);
-    });
-    app.get("/users", async (req, res) => {
+      if (filter.search) {
+        const query = {
+          name: { $regex: filter.search, $options: "i" },
+          // email: { $regex: filter.search, $options: "i" },
+        };
+        const result = await usersCollection.find(query).toArray();
+        res.send(result);
+      }
       const result = await usersCollection.find().toArray();
       res.send(result);
     });
-
-    app.patch("/users/admin/:id", async (req, res) => {
-      const id = req.params.id;
-      const filter = { _id: new ObjectId(id) };
-      const updatedDoc = {
-        $set: {
-          role: "admin",
-        },
-      };
-      const result = await usersCollection.updateOne(filter, updatedDoc);
-      res.send(result);
+    // app.get("/users", verifyToken, async (req, res) => {});
+    app.get("/users/admin/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      if (email !== req.decoded.email) {
+        return req.status(403).send({ message: "forbidden access" });
+      }
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+      let admin = false;
+      if (user) {
+        admin = user?.role === "admin";
+      }
+      res.send({ admin });
     });
-    app.delete("/users/:id", async (req, res) => {
+
+    app.patch(
+      "/users/admin/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const filter = { _id: new ObjectId(id) };
+        const updatedDoc = {
+          $set: {
+            role: "admin",
+          },
+        };
+        const result = await usersCollection.updateOne(filter, updatedDoc);
+        res.send(result);
+      }
+    );
+    app.delete("/users/:id", verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await usersCollection.deleteOne(query);
@@ -120,32 +139,33 @@ async function run() {
       const result = await mealCollection.insertOne(menuItem);
       res.send(result);
     });
+
     app.get("/meals", async (req, res) => {
       const filter = req.query;
-      console.log(filter);
-      const query = {
-        $or: [
-          {
-            mealName: { $regex: filter.search, $options: "i" },
+      if (filter.search || filter.sort) {
+        const query = {
+          mealName: { $regex: filter.search, $options: "i" },
+        };
+        const options = {
+          sort: {
+            price: filter?.sort === "asc" ? 1 : -1,
           },
-        ],
-      };
-      const options = {
-        sort: {
-          price: filter.sort === "asc" ? 1 : -1,
-        },
-      };
-      const result = await mealCollection.find(query, options).toArray();
-      res.send(result);
+        };
+        const result = await mealCollection.find(query, options).toArray();
+        res.send(result);
+      } else {
+        const result = await mealCollection.find().toArray();
+        res.send(result);
+      }
     });
 
-    app.get("/meals/:id", async (req, res) => {
+    app.get("/meals/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await mealCollection.findOne(query);
       res.send(result);
     });
-    app.patch("/meals/:id", async (req, res) => {
+    app.patch("/meals/:id", verifyToken, verifyAdmin, async (req, res) => {
       const data = req.body;
       const id = req.params.id;
       const filter = { _id: new ObjectId(id) };
@@ -167,7 +187,7 @@ async function run() {
       const result = await mealCollection.updateOne(filter, updatedDoc);
       res.send(result);
     });
-    app.delete("/meals/:id", async (req, res) => {
+    app.delete("/meals/:id", verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await mealCollection.deleteOne(query);
@@ -175,12 +195,12 @@ async function run() {
     });
 
     //  like
-    app.post("/likeCount", async (req, res) => {
+    app.post("/likeCount", verifyToken, async (req, res) => {
       const requestLike = req.body;
       const result = await LikeCollection.insertOne(requestLike);
       res.send(result);
     });
-    app.get("/likeCount/:mealName", async (req, res) => {
+    app.get("/likeCount/:mealName", verifyToken, async (req, res) => {
       const mealName = req.params.mealName;
       const query = {
         mealName: mealName,
@@ -189,22 +209,45 @@ async function run() {
       res.send(result);
     });
     // reviews related api
-    app.post("/reviews", async (req, res) => {
+    app.post("/reviews", verifyToken, async (req, res) => {
       const reviews = req.body;
       const result = await reviewsCollection.insertOne(reviews);
       res.send(result);
     });
-    app.get("/reviews", async (req, res) => {
+    app.get("/reviews", verifyToken, async (req, res) => {
       const result = await reviewsCollection.find().toArray();
       res.send(result);
     });
+    app.get("/reviews/:email", verifyToken, async (req, res) => {
+      const email = req.query.email;
+      const query = { email: email };
+      const result = await reviewsCollection.find(query).toArray();
+      res.send(result);
+    });
+    app.delete("/reviews/:id", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await reviewsCollection.deleteOne(query);
+      res.send(result);
+    });
+    app.patch("/reviews/:id", verifyToken, async (req, res) => {
+      const data = req.body;
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const updatedDoc = {
+        $set: {},
+      };
+      const result = await mealCollection.updateOne(filter, updatedDoc);
+      res.send(result);
+    });
 
-    app.post("/request", async (req, res) => {
+    // request related api
+    app.post("/request", verifyToken, async (req, res) => {
       const query = req.body;
       const result = await requestCollection.insertOne(query);
       res.send(result);
     });
-    app.get("/request/:email", async (req, res) => {
+    app.get("/request/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
       const query = {
         email: email,
@@ -212,7 +255,7 @@ async function run() {
       const result = await requestCollection.find(query).toArray();
       res.send(result);
     });
-    app.delete("/request/:id", async (req, res) => {
+    app.delete("/request/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await requestCollection.deleteOne(query);
