@@ -32,6 +32,10 @@ async function run() {
     const requestCollection = client.db("mealManagement").collection("request");
     const LikeCollection = client.db("mealManagement").collection("like");
     const reviewsCollection = client.db("mealManagement").collection("reviews");
+    const upcomingCollection = client
+      .db("mealManagement")
+      .collection("upcoming");
+
     // jwt route
     app.post("/jwt", async (req, res) => {
       const user = req.body;
@@ -50,7 +54,7 @@ async function run() {
       const token = req.headers.authorization.split(" ")[1];
       jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
         if (err) {
-          return res.status(401).send({ message: "unauthorized access" });
+          return res.status(403).send({ message: "unauthorized access" });
         }
         req.decoded = decoded;
         next();
@@ -96,19 +100,24 @@ async function run() {
       res.send(result);
     });
     // app.get("/users", verifyToken, async (req, res) => {});
-    app.get("/users/admin/:email", verifyToken, async (req, res) => {
-      const email = req.params.email;
-      if (email !== req.decoded.email) {
-        return req.status(403).send({ message: "forbidden access" });
+    app.get(
+      "/users/admin/:email",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const email = req.params.email;
+        if (email !== req.decoded.email) {
+          return res.status(403).send({ message: "forbidden access" });
+        }
+        const query = { email: email };
+        const user = await usersCollection.findOne(query);
+        let admin = false;
+        if (user) {
+          admin = user?.role === "admin";
+        }
+        res.send({ admin });
       }
-      const query = { email: email };
-      const user = await usersCollection.findOne(query);
-      let admin = false;
-      if (user) {
-        admin = user?.role === "admin";
-      }
-      res.send({ admin });
-    });
+    );
 
     app.patch(
       "/users/admin/:id",
@@ -134,7 +143,7 @@ async function run() {
     });
 
     //  meals collection
-    app.post("/meals", async (req, res) => {
+    app.post("/meals", verifyToken, verifyAdmin, async (req, res) => {
       const menuItem = req.body;
       const result = await mealCollection.insertOne(menuItem);
       res.send(result);
@@ -193,7 +202,16 @@ async function run() {
       const result = await mealCollection.deleteOne(query);
       res.send(result);
     });
+    app.post("/upcoming", async (req, res) => {
+      const menuItem = req.body;
+      const result = await upcomingCollection.insertOne(menuItem);
+      res.send(result);
+    });
 
+    app.get("/upcoming", async (req, res) => {
+      const result = await upcomingCollection.find().toArray();
+      res.send(result);
+    });
     //  like
     app.post("/likeCount", verifyToken, async (req, res) => {
       const requestLike = req.body;
