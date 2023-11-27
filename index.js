@@ -32,6 +32,8 @@ async function run() {
     const requestCollection = client.db("mealManagement").collection("request");
     const LikeCollection = client.db("mealManagement").collection("like");
     const reviewsCollection = client.db("mealManagement").collection("reviews");
+    const aboutCollection = client.db("mealManagement").collection("About");
+    const memberCollection = client.db("mealManagement").collection("member");
     const upcomingCollection = client
       .db("mealManagement")
       .collection("upcoming");
@@ -99,11 +101,18 @@ async function run() {
       const result = await usersCollection.find().toArray();
       res.send(result);
     });
-    // app.get("/users", verifyToken, async (req, res) => {});
+    app.get("/users/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const query = {
+        email: email,
+      };
+      const result = await usersCollection.find(query).toArray();
+      res.send(result);
+    });
     app.get(
       "/users/admin/:email",
       verifyToken,
-      verifyAdmin,
+
       async (req, res) => {
         const email = req.params.email;
         if (email !== req.decoded.email) {
@@ -168,7 +177,7 @@ async function run() {
       }
     });
 
-    app.get("/meals/:id", verifyToken, async (req, res) => {
+    app.get("/meals/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await mealCollection.findOne(query);
@@ -237,8 +246,10 @@ async function run() {
       res.send(result);
     });
     app.get("/reviews/:email", verifyToken, async (req, res) => {
-      const email = req.query.email;
-      const query = { email: email };
+      const email = req.params.email;
+      const query = {
+        email: email,
+      };
       const result = await reviewsCollection.find(query).toArray();
       res.send(result);
     });
@@ -277,6 +288,33 @@ async function run() {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await requestCollection.deleteOne(query);
+      res.send(result);
+    });
+
+    app.post("/about", verifyToken, async (req, res) => {
+      const about = req.body;
+      const result = await aboutCollection.insertOne(about);
+      res.send(result);
+    });
+    app.get("/about/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const query = {
+        email: email,
+      };
+      const result = await aboutCollection.find(query).toArray();
+      res.send(result);
+    });
+    app.post("/member", verifyToken, async (req, res) => {
+      const member = req.body;
+      const result = await memberCollection.insertOne(member);
+      res.send(result);
+    });
+    app.get("/member/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const query = {
+        email: email,
+      };
+      const result = await memberCollection.find(query).toArray();
       res.send(result);
     });
 
